@@ -6,7 +6,7 @@
 ** Use VBoxManage or the VirtualBox Manager GUI to make changes.
 -->
 <VirtualBox xmlns="http://www.virtualbox.org/" version="1.19-windows">
-  <Machine uuid="{7ddb0a49-78c9-41a2-9311-0152c9354499}" name="IDos" OSType="DOS" snapshotFolder="Snapshots" lastStateChange="2023-04-05T16:20:04Z">
+  <Machine uuid="{7ddb0a49-78c9-41a2-9311-0152c9354499}" name="IDos" OSType="DOS" snapshotFolder="Snapshots" lastStateChange="2023-04-11T14:46:41Z">
     <MediaRegistry>
       <HardDisks>
         <HardDisk uuid="{f16f5761-c505-de11-8350-d0cf93241fd6}" location="E:/osCode/DOS_6.22.vhd" format="VHD" type="Normal"/>
@@ -17,7 +17,7 @@
     </MediaRegistry>
     <ExtraData>
       <ExtraDataItem name="GUI/LastCloseAction" value="PowerOff"/>
-      <ExtraDataItem name="GUI/LastNormalWindowPosition" value="1706,425,720,439"/>
+      <ExtraDataItem name="GUI/LastNormalWindowPosition" value="1651,561,720,439"/>
     </ExtraData>
     <Hardware>
       <CPU>
@@ -32,7 +32,7 @@
       </BIOS>
       <Network>
         <Adapter slot="0" enabled="true" MACAddress="080027C756E1">
-          <NAT/>
+          <NAT localhost-reachable="true"/>
         </Adapter>
       </Network>
       <UART>
@@ -41,7 +41,7 @@
       <AudioAdapter controller="SB16" useDefault="true" driver="WAS" enabled="true" enabledOut="true"/>
       <Clipboard/>
       <GuestProperties>
-        <GuestProperty name="/VirtualBox/HostInfo/GUI/LanguageID" value="zh_CN" timestamp="1680711336575345900" flags="RDONLYGUEST"/>
+        <GuestProperty name="/VirtualBox/HostInfo/GUI/LanguageID" value="zh_CN" timestamp="1681224376708595200" flags="RDONLYGUEST"/>
       </GuestProperties>
       <StorageControllers>
         <StorageController name="Floppy" type="I82078" PortCount="1" useHostIOCache="true" Bootable="true">

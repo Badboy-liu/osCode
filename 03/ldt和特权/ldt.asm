@@ -1,7 +1,10 @@
+
 DA_32 EQU	4000h;32位
 DA_C EQU 98h; 只执行代码段的属性
 DA_DRW	EQU 92h;可读写的数据段
 DA_DRWA EQU 93h;存在的已访问的可读写的
+DA_LDT EQU 82h;省局
+SA_TIL EQU 4;具体的任务
 
 ;这句话是一个计算式，其中包含一些二进制运算符和常数。假设%2和%3是16位的整数变量：
 
@@ -31,6 +34,11 @@ PM_DESC_DATA:		Descriptor		0,		DATALen-1, DA_DRW
 PM_DESC_STACK:		Descriptor		0,		TopOfStack,	DA_DRWA+DA_32
 PM_DESC_TEST:		Descriptor		0200000h,0ffffh,	DA_DRW
 PM_DESC_VIDEO:		Descriptor		0B8000h,	0ffffh, DA_DRW
+
+
+LABEL_DESC_LDT: Descriptor 0,LDTLen-1,DA_LDT
+
+
 ;end of definiton gdt
 GdtLen equ $ - PM_GDT
 GdtPtr dw GdtLen - 1
@@ -41,7 +49,8 @@ SelectoerCode32	equ PM_DESC_CODE32 - PM_GDT
 SelectoerDATA	equ PM_DESC_DATA - PM_GDT
 SelectoerSTACK	equ PM_DESC_STACK - PM_GDT	
 SelectoerTEST	equ PM_DESC_TEST - PM_GDT
-SelectoerVideo	equ PM_DESC_VIDEO - PM_GDT				
+SelectoerVideo	equ PM_DESC_VIDEO - PM_GDT
+SelectoerLDT    equ LABEL_DESC_LDT-PM_GDT				
 ;END of [SECTION .gdt]
 
 [SECTION .data1]
@@ -101,6 +110,28 @@ PM_BEGIN:
 	shr eax,16
 	mov byte [PM_DESC_STACK+4],al
 	mov byte [PM_DESC_STACK+7],ah
+
+
+
+	;初始化32位的ldt段,注册到gdt
+	xor eax,eax
+	mov ax,ds
+	shl eax,4
+	add eax,LABEL_LDT   ;to do
+	mov word[LABEL_DESC_LDT+2],ax
+	shr eax,16
+	mov byte [LABEL_DESC_LDT+4],al
+	mov byte [LABEL_DESC_LDT+7],ah
+
+	;根据gdt,初始化ldt下的注册软件
+	xor eax,eax  ;清空eax
+	mov ax,ds    ;把代码段的数据读取到ax寄存器
+	shl eax,4    ;左移四位
+	add eax,LABEL_CODE_A
+	mov word [LABEL_LDT_DESC_CODEA +2 ],ax
+	shr eax,16
+	mov byte [LABEL_LDT_DESC_CODEA+4],al
+	mov byte [LABEL_LDT_DESC_CODEA+7],ah
 	
 	;加载GDTR
 	xor eax,eax
@@ -160,16 +191,38 @@ PM_SEG_CODE32 :
 .2: ;显示完毕
 
 	;测试段的寻址
-	mov ax, 'A'
-	mov [es:0],ax
-	mov ax,SelectoerVideo
-	mov gs,ax 
-	mov edi,(80*15 +0) *2
-	mov ah,0Ch
-	mov al,[es:0]
-	mov [gs:edi],ax
+	mov ax,SelectoerLDT ;加载ldt
+	lldt ax ;跳到SelectoerLDT
+	jmp SelectoerLDTCodeA:0
 
 	jmp $
 	
 
 SegCode32Len equ $ - PM_SEG_CODE32
+
+
+;ldt
+[SECTION .ldt]
+ALIGN 32 ;内存对齐方式32字节
+LABEL_LDT:
+;                    段基址 ,段界限,属性
+LABEL_LDT_DESC_CODEA: Descriptor 0,CodeALen-1,DA_C+DA_32
+
+LDTLen equ $ - LABEL_LDT ;$是当前位置   - 
+SelectoerLDTCodeA equ LABEL_LDT_DESC_CODEA - LABEL_LDT+SA_TIL
+
+[SECTION .la]
+ALIGN 32
+[BITS 32] ;设置指令架构位32位  [bits 64] 就是使用64位的指令集
+LABEL_CODE_A:
+	mov ax,SelectoerVideo
+	mov gs,ax
+	mov edi,(80*5+0)*2
+	mov ah,0Ch ;大写红色
+	mov al,'D';打印大D
+	mov [gs:edi],ax
+
+	jmp $
+CodeALen equ $ - LABEL_CODE_A
+;真正的任务段
+; end of 任务段	

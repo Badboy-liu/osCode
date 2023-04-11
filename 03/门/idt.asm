@@ -1,7 +1,13 @@
+
 DA_32 EQU	4000h;32位
 DA_C EQU 98h; 只执行代码段的属性
 DA_DRW	EQU 92h;可读写的数据段
 DA_DRWA EQU 93h;存在的已访问的可读写的
+DA_LDT EQU 82h;省局
+SA_TIL EQU 4;具体的任务
+SA_RPL3 EQU 3;特权等级
+DA_DPL3 EQU 60h;权限
+DA_386TSS EQU 89h ;tss属性
 
 ;这句话是一个计算式，其中包含一些二进制运算符和常数。假设%2和%3是16位的整数变量：
 
@@ -31,6 +37,10 @@ PM_DESC_DATA:		Descriptor		0,		DATALen-1, DA_DRW
 PM_DESC_STACK:		Descriptor		0,		TopOfStack,	DA_DRWA+DA_32
 PM_DESC_TEST:		Descriptor		0200000h,0ffffh,	DA_DRW
 PM_DESC_VIDEO:		Descriptor		0B8000h,	0ffffh, DA_DRW
+
+
+
+
 ;end of definiton gdt
 GdtLen equ $ - PM_GDT
 GdtPtr dw GdtLen - 1
@@ -38,11 +48,14 @@ dd  0 ; GDT 基地址
 
 ;GDT 选择子
 SelectoerCode32	equ PM_DESC_CODE32 - PM_GDT	
-SelectoerDATA	equ PM_DESC_DATA - PM_GDT
-SelectoerSTACK	equ PM_DESC_STACK - PM_GDT	
-SelectoerTEST	equ PM_DESC_TEST - PM_GDT
-SelectoerVideo	equ PM_DESC_VIDEO - PM_GDT				
+SelectoerDATA	equ PM_DESC_DATA   - PM_GDT
+SelectoerSTACK	equ PM_DESC_STACK  - PM_GDT	
+SelectoerVideo	equ PM_DESC_VIDEO  - PM_GDT 
+
+
+
 ;END of [SECTION .gdt]
+
 
 [SECTION .data1]
 ALIGN 32
@@ -50,8 +63,34 @@ ALIGN 32
 PM_DATA:
 PMMessage : db "Potect Mode", 0;
 OffsetPMessage equ PMMessage - $$
+_SavedIDTR:
+		DD 0
+		DD 0
+_SavedIMREG DD 0;中断屏蔽寄存器
+
+SavedIDTR EQU _SavedIDTR - $$
+SavedIMREG EQU _SavedIMREG -$$
+
 DATALen equ $- PM_DATA
 ;END of [SECTION .data]
+
+
+;IDT
+[SECTION .idt]
+ALIGN 32
+[BITS 32]
+PM_IDT:
+%rep 128
+	dw NormalHanlder
+	dw SelectoerCode32
+	dw 08e00h
+	dw (NormalHanlder >> 16) & 0fffh)
+%endrep
+IdtLen equ $- PM_IDT
+IdtPtr dw IdtLen - 1
+	dd 0
+
+
 
 ;全局的堆栈段
 [SECTION .gs]
@@ -61,6 +100,10 @@ PM_STACK:
 	times 512 db 0
 TopOfStack equ $ - PM_STACK -1
 ;END of STACK	
+
+
+
+
 
 [SECTION .s16]
 [BITS 16]
@@ -101,17 +144,42 @@ PM_BEGIN:
 	shr eax,16
 	mov byte [PM_DESC_STACK+4],al
 	mov byte [PM_DESC_STACK+7],ah
-	
+
+
+
+
+
+
+
+
+
+
+
 	;加载GDTR
 	xor eax,eax
 	mov ax,ds
 	shl eax,4
 	add eax,PM_GDT
 	mov dword [GdtPtr +2 ],eax
+
+	; 加载load ldt
+	xor eax,eax
+	mov ax,ds
+	shl eax,4
+	add eax,PM_IDT
+	mov dword [IdtPtr + 2],eax
+	sidt [_SavedIDTR]
+
+	in al,21h
+	mov [_SavedIMREG],al
+
+
 	lgdt [GdtPtr]
-	
+	lidt [IdtPtr]
+
+
 	;A20
-	cli
+	;cli
 	
 	in al,92h
 	or al,00000010b
@@ -132,7 +200,6 @@ PM_SEG_CODE32 :
 	mov ax,SelectoerDATA	;通过数据段的选择子放入ds寄存器，就可以用段+偏移进行寻址
 	mov ds,ax
 	
-	mov ax,SelectoerTEST	;通过测试段的选择子放入es寄存器，就可以用段+偏移进行寻址
 	mov es,ax
 	
 	mov ax,SelectoerVideo
@@ -142,34 +209,68 @@ PM_SEG_CODE32 :
 	mov ss,ax
 	mov esp,TopOfStack
 	
-	mov ah,0Ch
-	xor esi,esi
-	xor edi,edi
-	mov esi,OffsetPMessage
-	mov edi,(80*10 +0) *2
-	cld
-	
-.1:
-	lodsb
-	test al,al
-	jz .2
-	mov [gs:edi],ax
-	add edi,2
-	jmp .1
-	
-.2: ;显示完毕
-
-	;测试段的寻址
-	mov ax, 'A'
-	mov [es:0],ax
-	mov ax,SelectoerVideo
-	mov gs,ax 
-	mov edi,(80*15 +0) *2
-	mov ah,0Ch
-	mov al,[es:0]
-	mov [gs:edi],ax
+	call Init8259A
 
 	jmp $
 	
+; Init8259A ---------------------------------------------------------------------------------------------
+Init8259A:
+	mov	al, 011h
+	out	020h, al	; 主8259, ICW1.
+	call	io_delay
+
+	out	0A0h, al	; 从8259, ICW1.
+	call	io_delay
+
+	mov	al, 020h	; IRQ0 对应中断向量 0x20
+	out	021h, al	; 主8259, ICW2.
+	call	io_delay
+
+	mov	al, 028h	; IRQ8 对应中断向量 0x28
+	out	0A1h, al	; 从8259, ICW2.
+	call	io_delay
+
+	mov	al, 004h	; IR2 对应从8259
+	out	021h, al	; 主8259, ICW3.
+	call	io_delay
+
+	mov	al, 002h	; 对应主8259的 IR2
+	out	0A1h, al	; 从8259, ICW3.
+	call	io_delay
+
+	mov	al, 001h
+	out	021h, al	; 主8259, ICW4.
+	call	io_delay
+
+	out	0A1h, al	; 从8259, ICW4.
+	call	io_delay
+
+	mov	al, 11111110b	; 仅仅开启定时器中断
+	
+	out	021h, al	; 主8259, OCW1.
+	call	io_delay
+
+	mov	al, 11111111b	; 屏蔽从8259所有中断
+	out	0A1h, al	; 从8259, OCW1.
+	call	io_delay
+
+	ret
+; Init8259A ---------------------------------------------------------------------------------------------
+io_delay:
+	nop
+	nop
+	nop
+	nop
+	ret	
+;-------------------------
+
+_NormalHanlder:
+NormalHanlder equ _NormalHanlder - $$
+	mov ah,0ch
+	mov al,'X'
+	mov [gs:(80*1+70)*2],ax
+	jmp $
+	iretd
 
 SegCode32Len equ $ - PM_SEG_CODE32
+
